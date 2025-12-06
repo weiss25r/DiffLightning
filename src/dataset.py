@@ -33,7 +33,8 @@ class Cifar10DataModule(LightningDataModule):
         batch_size: int = 128, 
         num_workers: int = 4, 
         val_split: float = 0.1,
-        seed: int = 42
+        seed: int = 42,
+        aug_settings: dict = {}
     ):
         super().__init__()
         self.save_hyperparameters()
@@ -43,7 +44,7 @@ class Cifar10DataModule(LightningDataModule):
         self.std = (0.5, 0.5, 0.5)
 
         self.train_transforms = transforms.Compose([
-            transforms.RandomHorizontalFlip(p=0.5),
+            transforms.RandomHorizontalFlip(aug_settings['horizontal_flip']),
             transforms.ToTensor(),
             transforms.Normalize(self.mean, self.std)
         ])
@@ -57,7 +58,7 @@ class Cifar10DataModule(LightningDataModule):
         generator = torch.Generator().manual_seed(self.hparams.seed)
 
         if stage == 'fit' or stage is None:
-            raw_train_dataset = CIFAR10(self.hparams.data_dir, train=True, transform=None)
+            raw_train_dataset = CIFAR10(self.hparams.data_dir, train=True, transform=None, download=True)
 
             n_total = len(raw_train_dataset)
             n_val = int(n_total * self.hparams.val_split)

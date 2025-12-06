@@ -106,6 +106,10 @@ class DiffusionModel(LightningModule):
         
         self.fid.reset()
 
+    def load_checkpoint(self, checkpoint_path):
+        checkpoint = torch.load(checkpoint_path)
+        self.load_state_dict(checkpoint, strict=True)
+   
     @torch.no_grad()
     def generate(self, n_samples=16, device=None):
         if device is None:

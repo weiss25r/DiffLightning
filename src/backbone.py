@@ -1,6 +1,7 @@
 import torch
 import math
 from torch import nn
+import torch.nn.functional as F
 
 class SinusoidalPositionEmbeddings(nn.Module):
     def __init__(self, dim):
@@ -18,9 +19,6 @@ class SinusoidalPositionEmbeddings(nn.Module):
         embeddings = torch.cat((embeddings.sin(), embeddings.cos()), dim=-1)
         return embeddings
         
-
-import torch.nn.functional as F
-
 class ResNetBlock(nn.Module):
     def __init__(self, in_channels, out_channels, time_emb_dim, dropout=0.1):
         super().__init__()
@@ -89,7 +87,7 @@ class AttentionBlock(nn.Module):
         return x + h
 
 class Backbone(nn.Module):
-    def __init__(self, in_channels=3, base_channels=128, multipliers=(1, 2, 2, 2)):
+    def __init__(self, in_channels=3, base_channels=128, multipliers=(1, 2, 2, 2), attention_res=(16, 4)):
         super().__init__()
 
         self.channels = [base_channels * m for m in multipliers]
@@ -104,39 +102,62 @@ class Backbone(nn.Module):
             nn.Linear(time_dim, time_dim),
         )
 
+        #DESCENDING FROM 32X32 to 4x4
+
         self.downs = nn.ModuleList()
         ch_in = self.channels[0] 
-        
+        current_res = 32
+
         for i in range(len(self.channels) - 1):
             ch_out = self.channels[i+1]
-            self.downs.append(nn.ModuleList([
-                ResNetBlock(ch_in, ch_out, time_emb_dim=time_dim),
-                ResNetBlock(ch_out, ch_out, time_emb_dim=time_dim),
-                nn.Conv2d(in_channels=ch_out, out_channels=ch_out, kernel_size=3, stride=2, padding=1) 
-            ]))
-            ch_in = ch_out 
 
+            layers = nn.ModuleList()
+
+            layers.append(ResNetBlock(ch_in, ch_out, time_emb_dim=time_dim))
+            
+            if current_res in attention_res:
+                layers.append(AttentionBlock(ch_out))
+
+            layers.append(ResNetBlock(ch_out, ch_out, time_emb_dim=time_dim)),
+            layers.append(nn.Conv2d(in_channels=ch_out, out_channels=ch_out, kernel_size=3, stride=2, padding=1)) 
+
+            ch_in = ch_out 
+            current_res = current_res // 2
+
+            self.downs.append(layers)
+
+        #BOTTLENECK LAYER - STILL 4X4
         mid_ch = self.channels[-1]
-        self.bottleneck = nn.ModuleList([
-            ResNetBlock(mid_ch, mid_ch, time_dim),
-            AttentionBlock(mid_ch), #attention solo a 4x4
-            ResNetBlock(mid_ch, mid_ch, time_dim),
-        ])
+        self.bottleneck = nn.ModuleList()
+        self.bottleneck.append(ResNetBlock(mid_ch, mid_ch, time_dim))
+
+        if current_res in attention_res:
+            self.bottleneck.append(AttentionBlock(mid_ch))
+
+        self.bottleneck.append(ResNetBlock(mid_ch, mid_ch, time_dim))
 
         self.ups = nn.ModuleList()
         rev_channels = list(reversed(self.channels)) 
         
+
+        #ASCENDING FROM 4X4 to 32X32
         for i in range(len(rev_channels)-1):
             inp_ch = rev_channels[i]
             out_ch = rev_channels[i+1]
             
-            self.ups.append(nn.ModuleList([
-                nn.Upsample(scale_factor=2, mode="nearest"),
-                nn.Conv2d(inp_ch, inp_ch, 3, padding=1),
-                
-                ResNetBlock(inp_ch * 2, out_ch, time_dim), 
-                ResNetBlock(out_ch, out_ch, time_dim),
-            ]))
+            layer = nn.ModuleList()
+            layer.append(nn.Upsample(scale_factor=2, mode="nearest"))
+
+            current_res = current_res*2
+
+            layer.append(nn.Conv2d(inp_ch, inp_ch, 3, padding=1))
+            layer.append(ResNetBlock(inp_ch * 2, out_ch, time_dim))
+
+            if current_res in attention_res:
+                layer.append(AttentionBlock(out_ch))
+
+            layer.append(ResNetBlock(out_ch, out_ch, time_dim))
+            self.ups.append(layer)
 
         self.final_conv = nn.Conv2d(self.channels[0], in_channels, 3, padding=1)
 
@@ -147,28 +168,38 @@ class Backbone(nn.Module):
         
         h_skips = []
 
-        for block1, block2, downsample in self.downs:
-            x = block1(x, t)
-            x = block2(x, t)
-            h_skips.append(x) 
-            x = downsample(x)
+        for layer_stack in self.downs:
+            for layer in layer_stack:
+                if isinstance(layer, ResNetBlock):
+                    x = layer(x, t)
+                elif isinstance(layer, AttentionBlock):
+                    x = layer(x)
+                else:
+                    # Downsample
+                    h_skips.append(x)
+                    x = layer(x)
 
         x = self.bottleneck[0](x, t) 
-        x = self.bottleneck[1](x)    
-        x = self.bottleneck[2](x, t) 
 
-        for upsample, up_conv, block1, block2 in self.ups:
-            x = upsample(x)
-            x = up_conv(x)
+        if isinstance(self.bottleneck[1], AttentionBlock):
+            x = self.bottleneck[1](x)
+            x = self.bottleneck[2](x, t)
+        else:
+            x = self.bottleneck[1](x, t)
+
+        for layer_stack in self.ups:
+            x = layer_stack[0](x)
+            x = layer_stack[1](x)
             
-            skip_x = h_skips.pop() 
-            
+            skip_x = h_skips.pop()
             x = torch.cat([x, skip_x], dim=1)
             
-            x = block1(x, t)
-            x = block2(x, t)
-
+            for layer in layer_stack[2:]:
+                if isinstance(layer, ResNetBlock):
+                    x = layer(x, t)
+                else:
+                    x = layer(x)
         x = self.final_conv(x)
+        
         return x
-    
-    
+        
