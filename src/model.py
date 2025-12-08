@@ -1,6 +1,7 @@
 import torch
 import torch.nn.functional as F
 from torch.optim import Adam
+from torch import nn
 from lightning import LightningModule, Callback
 from torchmetrics.image.fid import FrechetInceptionDistance
 from torchvision.utils import make_grid
@@ -13,7 +14,9 @@ class DiffusionModel(LightningModule):
         self.backbone = backbone_class(**backbone_params)
         self.noise_scheduler = noise_scheduler_class(T=T)
         
-        self.fid = FrechetInceptionDistance(feature=64, normalize=True) 
+        self.metrics = nn.ModuleDict({
+            "fid": FrechetInceptionDistance(feature=64, normalize=True) 
+        }) 
 
     def forward(self, x, t):
         return self.backbone(x, t)
@@ -47,7 +50,7 @@ class DiffusionModel(LightningModule):
         self.log('val_loss', val_loss, prog_bar=True, sync_dist=True)
 
         images_uint8 = ((images + 1) / 2).clamp(0, 1)
-        self.fid.update(images_uint8, real=True)
+        self.metrics["fid"].update(images_uint8, real=True)
 
     def on_validation_epoch_end(self):
         
@@ -58,7 +61,7 @@ class DiffusionModel(LightningModule):
             
             self.fid.update(fake_images, real=False)
             
-            fid_score = self.fid.compute()
+            fid_score = self.metrics["fid"].compute()
             self.log('val_fid', fid_score, prog_bar=True)
             
             self.fid.reset()
@@ -81,30 +84,30 @@ class DiffusionModel(LightningModule):
         real_imgs_norm = (images + 1) / 2
         real_imgs_norm = real_imgs_norm.clamp(0, 1)
         
-        self.fid.update(real_imgs_norm, real=True)
+        self.metrics["fid"].update(real_imgs_norm, real=True)
 
     def on_test_epoch_end(self):
         print("\nCalcolo FID...")
         
-        num_samples_total = 1024 
-        batch_size_gen = 64
+        num_samples_total = 2 
+        batch_size_gen = 1
         
         num_batches = num_samples_total // batch_size_gen
         
         for i in range(num_batches):
             fake_imgs = self.generate(n_samples=batch_size_gen, device=self.device)
             
-            self.fid.update(fake_imgs, real=False)
+            self.metrics["fid"].update(fake_imgs, real=False)
             
             if (i+1) % 5 == 0:
                 print(f"Generato batch {i+1}/{num_batches}")
 
-        fid_score = self.fid.compute()
+        fid_score = self.metrics["fid"].compute()
         print(f"Final Test FID: {fid_score}")
         
         self.log('test_fid', fid_score)
         
-        self.fid.reset()
+        self.metrics["fid"].reset()
 
     def load_checkpoint(self, checkpoint_path):
         checkpoint = torch.load(checkpoint_path)
