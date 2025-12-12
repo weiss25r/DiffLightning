@@ -89,9 +89,9 @@ class AttentionBlock(nn.Module):
 class Backbone(nn.Module):
     def __init__(self, in_channels=3, base_channels=128, multipliers=(1, 2, 2, 2), attention_res=(16, 4)):
         super().__init__()
-
-        self.channels = [base_channels * m for m in multipliers]
         
+        self.channels = [base_channels * m for m in multipliers]
+        self.in_channels = in_channels
         self.conv_in = nn.Conv2d(in_channels, self.channels[0], kernel_size=3, padding=1)
         
         time_dim = base_channels * 4
@@ -118,7 +118,7 @@ class Backbone(nn.Module):
             if current_res in attention_res:
                 layers.append(AttentionBlock(ch_out))
 
-            layers.append(ResNetBlock(ch_out, ch_out, time_emb_dim=time_dim)),
+            layers.append(ResNetBlock(ch_out, ch_out, time_emb_dim=time_dim))
             layers.append(nn.Conv2d(in_channels=ch_out, out_channels=ch_out, kernel_size=3, stride=2, padding=1)) 
 
             ch_in = ch_out 

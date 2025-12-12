@@ -50,6 +50,9 @@ class DiffusionModel(LightningModule):
         self.log('val_loss', val_loss, prog_bar=True, sync_dist=True)
 
         images_uint8 = ((images + 1) / 2).clamp(0, 1)
+        if images_uint8.shape[1] == 1:
+            images_uint8 = images_uint8.repeat(1, 3, 1, 1)
+
         self.metrics["fid"].update(images_uint8, real=True)
 
     def on_validation_epoch_end(self):
@@ -59,12 +62,14 @@ class DiffusionModel(LightningModule):
             
             fake_images = self.generate(n_samples=32, device=self.device)
             
-            self.fid.update(fake_images, real=False)
+            if fake_images.shape[1] == 1:
+                fake_images = fake_images.repeat(1, 3, 1, 1)
+            self.metrics["fid"].update(fake_images, real=False)
             
             fid_score = self.metrics["fid"].compute()
             self.log('val_fid', fid_score, prog_bar=True)
             
-            self.fid.reset()
+            self.metrics["fid"].reset()
 
     def configure_optimizers(self):
         return Adam(self.parameters(), lr=self.hparams.lr)
@@ -83,6 +88,9 @@ class DiffusionModel(LightningModule):
 
         real_imgs_norm = (images + 1) / 2
         real_imgs_norm = real_imgs_norm.clamp(0, 1)
+
+        if real_imgs_norm.shape[1] == 1:
+            real_imgs_norm = real_imgs_norm.repeat(1, 3, 1, 1)
         
         self.metrics["fid"].update(real_imgs_norm, real=True)
 
@@ -96,7 +104,8 @@ class DiffusionModel(LightningModule):
         
         for i in range(num_batches):
             fake_imgs = self.generate(n_samples=batch_size_gen, device=self.device)
-            
+            if fake_imgs.shape[1] == 1:
+                fake_imgs = fake_imgs.repeat(1, 3, 1, 1)
             self.metrics["fid"].update(fake_imgs, real=False)
             
             if (i+1) % 5 == 0:
@@ -110,18 +119,18 @@ class DiffusionModel(LightningModule):
         self.metrics["fid"].reset()
 
     def load_checkpoint(self, checkpoint_path):
-        checkpoint = torch.load(checkpoint_path)
+        checkpoint = torch.load(checkpoint_path, weights_only=False)
         self.load_state_dict(checkpoint, strict=True)
    
     @torch.no_grad()
     def generate(self, n_samples=16, device=None):
         if device is None:
             device = self.device
-            
+        self.to(device)
         self.backbone.eval()
-        x = torch.randn((n_samples, 3, 32, 32)).to(device)
+        x = torch.randn((n_samples, self.backbone.in_channels, 32, 32)).to(device)
 
-        T = self.hparams.T 
+        T = self.hparams.T
 
         for i in reversed(range(T)):
             t = torch.full((n_samples,), i, device=device, dtype=torch.long)

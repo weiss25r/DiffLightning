@@ -2,13 +2,12 @@ import torch
 import yaml
 from lightning import Trainer
 from lightning.pytorch.loggers import MLFlowLogger, WandbLogger
-from lightning.pytorch.callbacks import ModelCheckpoint, LearningRateMonitor
+from lightning.pytorch.callbacks import ModelCheckpoint, EarlyStopping
 
-from .dataset import Cifar10DataModule
+from .dataset import DiffusionModelDataModule
 from .model import DiffusionModel, DiffusionLoggingCallback
 from .backbone import Backbone
 from .noise_scheduler import NoiseScheduler
-import wandb
 
 class DiffusionModelTrainer():
     def __init__(self, train_config_path='../config/training_config.yaml'):
@@ -25,7 +24,8 @@ class DiffusionModelTrainer():
             print("Error loading config file:", e)
             return
         
-        self.dm = Cifar10DataModule(
+        self.dm = DiffusionModelDataModule(
+            dataset = data_config["dataset"],
             batch_size = data_config['batch_size'], 
             val_split = data_config['val_split'],
             num_workers = data_config['num_workers'],
@@ -43,6 +43,12 @@ class DiffusionModelTrainer():
         )
         
         image_callback = DiffusionLoggingCallback()
+        early_stopping = EarlyStopping(
+            monitor="val_loss",
+            mode="min",
+            patience = train_config['patience'],
+            verbose = train_config['verbose']
+        )
 
         if logging_config['logger'] == 'mlflow':
             logger = MLFlowLogger(
@@ -76,14 +82,14 @@ class DiffusionModelTrainer():
             accelerator="auto", 
             devices=train_config['devices'],
             logger=logger,
-            callbacks=[checkpoint_callback, image_callback],
+            callbacks=[checkpoint_callback, image_callback, early_stopping],
             precision="16-mixed" if torch.cuda.is_available() else "32", 
-            log_every_n_steps=10
+            log_every_n_steps=logging_config['log_every_n_steps']
         )
 
     
-    def train(self):
-        self.trainer.fit(model=self.model, datamodule=self.dm)
+    def train(self, checkpoint_path=None):
+        self.trainer.fit(model=self.model, datamodule=self.dm, ckpt_path=checkpoint_path)
 
     def test(self, checkpoint_path=None):
-        self.trainer.test(self.model, datamodule=self.dm, ckpt_path=checkpoint_path, weights_only=False)
+        self.trainer.test(self.model, datamodule=self.dm, ckpt_path=checkpoint_path)

@@ -1,6 +1,6 @@
 import torch
 from torch.utils.data import DataLoader
-from torchvision.datasets import CIFAR10
+from torchvision.datasets import CIFAR10, MNIST
 from torchvision import transforms
 from lightning import LightningDataModule
 from typing import Optional
@@ -26,9 +26,10 @@ class SubsetWithTransform(Dataset):
     def __len__(self):
         return len(self.indices)
     
-class Cifar10DataModule(LightningDataModule):
+class DiffusionModelDataModule(LightningDataModule):
     def __init__(
-        self, 
+        self,
+        dataset: str = "CIFAR10",
         data_dir: str = './data', 
         batch_size: int = 128, 
         num_workers: int = 4, 
@@ -38,18 +39,24 @@ class Cifar10DataModule(LightningDataModule):
     ):
         super().__init__()
         self.save_hyperparameters()
+
+        self.dataset_class = CIFAR10 if dataset == "CIFAR10" else MNIST
         
         #DDPM: [0, 255] -> [-1, 1]
-        self.mean = (0.5, 0.5, 0.5)
-        self.std = (0.5, 0.5, 0.5)
+        self.mean = (0.5, ) if dataset == "MNIST" else (0.5, 0.5, 0.5)
+        self.std = (0.5,)  if dataset == "MNIST" else (0.5, 0.5, 0.5)
+
 
         self.train_transforms = transforms.Compose([
+            transforms.Resize(32),
             transforms.RandomHorizontalFlip(aug_settings['horizontal_flip']),
+            transforms.RandomVerticalFlip(aug_settings['vertical_flip']),
             transforms.ToTensor(),
             transforms.Normalize(self.mean, self.std)
         ])
 
         self.eval_transforms = transforms.Compose([
+            transforms.Resize(32),
             transforms.ToTensor(),
             transforms.Normalize(self.mean, self.std)
         ])
@@ -58,7 +65,7 @@ class Cifar10DataModule(LightningDataModule):
         generator = torch.Generator().manual_seed(self.hparams.seed)
 
         if stage == 'fit' or stage is None:
-            raw_train_dataset = CIFAR10(self.hparams.data_dir, train=True, transform=None, download=True)
+            raw_train_dataset = self.dataset_class(self.hparams.data_dir, train=True, transform=None, download=True)
 
             n_total = len(raw_train_dataset)
             n_val = int(n_total * self.hparams.val_split)
@@ -81,7 +88,7 @@ class Cifar10DataModule(LightningDataModule):
             )
 
         if stage == 'test':
-            self.test_dataset = CIFAR10(
+            self.test_dataset = self.dataset_class(
                 self.hparams.data_dir, 
                 train=False, 
                 transform=self.eval_transforms

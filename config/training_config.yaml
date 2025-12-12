@@ -1,20 +1,23 @@
 data:
-  dataset: CIFAR10 #possible values: CIFAR10, CIFAR100, MNIST
+  dataset: MNIST #possible values: CIFAR10, CIFAR100, MNIST
   num_workers: 4
   val_split: 0.1 #fraction of training data used for validation
   batch_size: 128
   seed: 42
 augmentation:
-  horizontal_flip: 0.5
+  horizontal_flip: 0
+  vertical_flip: 0
 
 training:
-  lr: 0.0001
+  lr: 0.0002
   T: 1000
-  epochs: 100
+  epochs: 50
   devices: 1
+  patience: 35
+  verbose: false
 
 backbone:
-  in_channels: 3 #change to 1 for MNIST
+  in_channels: 1 #change to 1 for MNIST
   base_channels: 128
   multipliers: 
     - 1
@@ -26,8 +29,10 @@ backbone:
     - 4
 
 logging:
-  logger: mlflow
-  experiment_name: DDPM_CIFAR10
+  logger: wandb
+  version: "exp_1_50epoch"
+  experiment_name: DDPM_MNIST
   logging_dir: ./logs
   checkpoint_dir: checkpoints/
   checkpoint_name: ddpm-{epoch:02d}-{val_loss:.2f}
+  log_every_n_steps: 10
