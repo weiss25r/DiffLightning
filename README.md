@@ -30,7 +30,8 @@ DiffLightning/
 ├── src/
 │   ├── backbone.py           # U-Net implementation (ResBlocks, Attention)
 │   ├── dataset.py            # LightningDataModules for MNIST/CIFAR
-│   ├── model.py              # The Diffusion Model 
+│   ├── model.py              # The Diffusion Model
+│   ├── noise_scheduler.py    # Forward process implementation
 │   ├── sampling.py           # Inference logic wrapper
 │   └── training.py           # Training wrapper
 ├── notebooks/
