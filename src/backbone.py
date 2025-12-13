@@ -5,12 +5,19 @@ import torch.nn.functional as F
 
 class SinusoidalPositionEmbeddings(nn.Module):
     def __init__(self, dim):
+        """
+        Initializes a SinusoidalPositionEmbeddings instance.
+        This class follows the implementation of "Attention is all you need" to create embeddings of timesteps.
+
+        Parameters:
+            dim (int): The dimensionality of the embeddings.
+        """
         super().__init__()
         self.dim = dim
 
     
     def forward(self, time):
-        #formula di Attention is all you need 2017
+        #formula of "Attention is all you need" 2017
         device = time.device
         half_dim = self.dim // 2
         embeddings = math.log(10000) / (half_dim - 1)
@@ -21,6 +28,16 @@ class SinusoidalPositionEmbeddings(nn.Module):
         
 class ResNetBlock(nn.Module):
     def __init__(self, in_channels, out_channels, time_emb_dim, dropout=0.1):
+        
+        """
+        ResNetBlock for the UNet backbone
+
+        Parameters:
+            in_channels (int): The number of channels in the input.
+            out_channels (int): The number of channels in the output.
+            time_emb_dim (int): The number of channels in the time embedding.
+            dropout (float, optional): The dropout rate. Defaults to 0.1.
+        """
         super().__init__()
         
         self.norm1 = nn.GroupNorm(32, in_channels)
@@ -65,6 +82,12 @@ class ResNetBlock(nn.Module):
 
 class AttentionBlock(nn.Module):
     def __init__(self, channels):
+        """
+        Initialize the AttentionBlock, composed by a GroupNorm and a MultiHeadAttention
+
+        Parameters:
+        channels (int): The number of channels in the input.
+        """
         super().__init__()
         self.norm1 = nn.GroupNorm(32, channels)
         self.mha = nn.MultiheadAttention(channels, num_heads=4, batch_first=True)
@@ -88,6 +111,18 @@ class AttentionBlock(nn.Module):
 
 class Backbone(nn.Module):
     def __init__(self, in_channels=3, base_channels=128, multipliers=(1, 2, 2, 2), attention_res=(16, 4)):
+        """
+        U-Net backbone for Diffusion Models.
+        Resolution changes from 32x32 to 4x4 and back.
+        Parameters:
+            in_channels (int, optional): Number of channels in the input. Defaults to 3.
+            base_channels (int, optional): Base number of channels in the model. Defaults to 128.
+            multipliers (Tuple[int], optional): Multipliers for the number of channels in each layer of the model. Defaults to (1, 2, 2, 2).
+            attention_res (Tuple[int], optional): Resolutions at which attention blocks are added. Defaults to (16, 4).
+
+        Returns:
+            None
+        """
         super().__init__()
         
         self.channels = [base_channels * m for m in multipliers]

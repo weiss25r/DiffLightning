@@ -7,7 +7,7 @@ from torchmetrics.image.fid import FrechetInceptionDistance
 from torchvision.utils import make_grid
 
 class DiffusionModel(LightningModule):
-    def __init__(self, backbone_class, backbone_params, noise_scheduler_class, T=1000, lr=2e-4):
+    def __init__(self, backbone_class, backbone_params, noise_scheduler_class, T=1000, lr=2e-4, compute_fid_every_n_epochs=5):
         super().__init__() 
         self.save_hyperparameters() 
         
@@ -15,8 +15,9 @@ class DiffusionModel(LightningModule):
         self.noise_scheduler = noise_scheduler_class(T=T)
         
         self.metrics = nn.ModuleDict({
-            "fid": FrechetInceptionDistance(feature=64, normalize=True) 
-        }) 
+            "val_fid": FrechetInceptionDistance(feature=64, normalize=True),
+            "test_fid": FrechetInceptionDistance(feature=64, normalize=True)
+        })
 
     def forward(self, x, t):
         return self.backbone(x, t)
@@ -53,23 +54,29 @@ class DiffusionModel(LightningModule):
         if images_uint8.shape[1] == 1:
             images_uint8 = images_uint8.repeat(1, 3, 1, 1)
 
-        self.metrics["fid"].update(images_uint8, real=True)
+        self.metrics["val_fid"].update(images_uint8, real=True)
 
     def on_validation_epoch_end(self):
+        if self.trainer.sanity_checking:
+            return
         
-        if (self.current_epoch + 1) % 5 == 0:
-            print(f"\nCalcolo FID all'epoca {self.current_epoch}...")
+        if (self.current_epoch + 1) % self.hparams.compute_fid_every_n_epochs == 0:
+            print(f"\nFID computation for epoch {self.current_epoch}...")
             
             fake_images = self.generate(n_samples=32, device=self.device)
             
+            wandb_logger = self.logger
+            grid = make_grid(tensor=fake_images, normalize=True)
+            wandb_logger.log_image(key=f"samples_epoch_{self.current_epoch}", images=[grid], caption=[f"samples_epoch_{self.current_epoch}"])
+
             if fake_images.shape[1] == 1:
                 fake_images = fake_images.repeat(1, 3, 1, 1)
-            self.metrics["fid"].update(fake_images, real=False)
-            
-            fid_score = self.metrics["fid"].compute()
+
+            self.metrics["val_fid"].update(fake_images, real=False)
+            fid_score = self.metrics["val_fid"].compute()
             self.log('val_fid', fid_score, prog_bar=True)
             
-            self.metrics["fid"].reset()
+            self.metrics["val_fid"].reset()
 
     def configure_optimizers(self):
         return Adam(self.parameters(), lr=self.hparams.lr)
@@ -92,31 +99,35 @@ class DiffusionModel(LightningModule):
         if real_imgs_norm.shape[1] == 1:
             real_imgs_norm = real_imgs_norm.repeat(1, 3, 1, 1)
         
-        self.metrics["fid"].update(real_imgs_norm, real=True)
+        self.metrics["test_fid"].update(real_imgs_norm, real=True)
 
     def on_test_epoch_end(self):
-        print("\nCalcolo FID...")
+        print("\nFID computation...")
         
-        num_samples_total = 2 
-        batch_size_gen = 1
+        num_samples_total = 128 
+        batch_size_gen = 32
         
         num_batches = num_samples_total // batch_size_gen
         
         for i in range(num_batches):
             fake_imgs = self.generate(n_samples=batch_size_gen, device=self.device)
+
+            wandb_logger = self.logger
+
+            grid = make_grid(tensor=fake_imgs, normalize=True)
+            wandb_logger.log_image(key="samples_test", images=[grid], caption=["samples_test"])
+            
             if fake_imgs.shape[1] == 1:
                 fake_imgs = fake_imgs.repeat(1, 3, 1, 1)
-            self.metrics["fid"].update(fake_imgs, real=False)
-            
-            if (i+1) % 5 == 0:
-                print(f"Generato batch {i+1}/{num_batches}")
 
-        fid_score = self.metrics["fid"].compute()
+            self.metrics["test_fid"].update(fake_imgs, real=False)
+
+        fid_score = self.metrics["test_fid"].compute()
         print(f"Final Test FID: {fid_score}")
         
         self.log('test_fid', fid_score)
         
-        self.metrics["fid"].reset()
+        self.metrics["test_fid"].reset()
 
     def load_checkpoint(self, checkpoint_path):
         checkpoint = torch.load(checkpoint_path, weights_only=False)
@@ -155,20 +166,3 @@ class DiffusionModel(LightningModule):
         
         x = (x.clamp(-1, 1) + 1) / 2
         return x
-
-class DiffusionLoggingCallback(Callback):
-    def on_train_epoch_end(self, trainer, pl_module):
-        if (trainer.current_epoch + 1) % 5 == 0:
-            samples = pl_module.generate(n_samples=16, device=pl_module.device)
-            
-            grid = make_grid(samples, nrow=4)
-            
-            logger = trainer.logger
-            
-            if hasattr(logger, 'experiment') and hasattr(logger.experiment, 'log_image'):
-                ndarr = grid.mul(255).add_(0.5).clamp_(0, 255).permute(1, 2, 0).to('cpu', torch.uint8).numpy()
-                
-                logger.experiment.log_image(logger.run_id, ndarr, f"generated_epoch_{trainer.current_epoch}.png")
-            
-            elif hasattr(logger, 'experiment') and hasattr(logger.experiment, 'add_image'):
-                logger.experiment.add_image('generated_images', grid, trainer.current_epoch)

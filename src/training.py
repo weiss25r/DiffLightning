@@ -5,12 +5,25 @@ from lightning.pytorch.loggers import MLFlowLogger, WandbLogger
 from lightning.pytorch.callbacks import ModelCheckpoint, EarlyStopping
 
 from .dataset import DiffusionModelDataModule
-from .model import DiffusionModel, DiffusionLoggingCallback
+from .model import DiffusionModel
 from .backbone import Backbone
 from .noise_scheduler import NoiseScheduler
 
 class DiffusionModelTrainer():
     def __init__(self, train_config_path='../config/training_config.yaml'):
+        """
+        Initialize a DiffusionModelTrainer object with a given configuration file.
+
+        Args:
+            train_config_path (str): Path to the YAML configuration file for training.
+
+        Returns:
+            None
+
+        Raises:
+            Exception: If there is an error loading the config file.
+        """
+        
         try:
             with open(train_config_path, 'r') as f:
                 config_file = yaml.safe_load(f)
@@ -42,7 +55,6 @@ class DiffusionModelTrainer():
             save_last=True
         )
         
-        image_callback = DiffusionLoggingCallback()
         early_stopping = EarlyStopping(
             monitor="val_loss",
             mode="min",
@@ -50,23 +62,18 @@ class DiffusionModelTrainer():
             verbose = train_config['verbose']
         )
 
-        if logging_config['logger'] == 'mlflow':
-            logger = MLFlowLogger(
-                experiment_name=logging_config['experiment_name'],
-                tracking_uri="file:./mlruns" 
-            )
-        elif logging_config['logger'] == 'wandb':
-            logger = WandbLogger(
-                name = logging_config['experiment_name'],
-                version = logging_config['version'],
-                dir = logging_config['logging_dir'],
-                log_model=True,
-            )
+        logger = WandbLogger(
+            name = logging_config['experiment_name'],
+            version = logging_config['version'],
+            dir = logging_config['logging_dir'],
+            log_model=True,
+        )
 
         backbone_params = {
             'in_channels': backbone_config['in_channels'], 
             'base_channels': backbone_config['base_channels'],
-            'multipliers': backbone_config['multipliers']
+            'multipliers': backbone_config['multipliers'],
+            'attention_res': backbone_config['attention_resolutions']
         }
         
         self.model = DiffusionModel(
@@ -74,7 +81,8 @@ class DiffusionModelTrainer():
             backbone_params=backbone_params,
             noise_scheduler_class=NoiseScheduler,
             T=train_config['T'],
-            lr=train_config['lr']
+            lr=train_config['lr'],
+            compute_fid_every_n_epochs = logging_config["compute_fid_every_n_epochs"]
         )
 
         self.trainer = Trainer(
@@ -82,14 +90,32 @@ class DiffusionModelTrainer():
             accelerator="auto", 
             devices=train_config['devices'],
             logger=logger,
-            callbacks=[checkpoint_callback, image_callback, early_stopping],
+            callbacks=[checkpoint_callback, early_stopping],
             precision="16-mixed" if torch.cuda.is_available() else "32", 
             log_every_n_steps=logging_config['log_every_n_steps']
         )
 
     
     def train(self, checkpoint_path=None):
+        """
+        Train a diffusion model
+
+        Args:
+            checkpoint_path (str, optional): Path to the checkpoint file of the DiffusionModel to resume training from. Defaults to None.
+
+        Returns:
+            None
+        """
         self.trainer.fit(model=self.model, datamodule=self.dm, ckpt_path=checkpoint_path)
 
     def test(self, checkpoint_path=None):
+        """
+        Test a diffusion model
+
+        Args:
+            checkpoint_path (str, optional): Path to the checkpoint file of the DiffusionModel to test from. Defaults to None.
+
+        Returns:
+            None
+        """
         self.trainer.test(self.model, datamodule=self.dm, ckpt_path=checkpoint_path)

@@ -9,6 +9,14 @@ from torch.utils.data import Dataset
 
 class SubsetWithTransform(Dataset):
     def __init__(self, dataset, indices, transform=None):
+        """
+        Initializes a SubsetWithTransform object. This class is a helper for applying different transforms to train, val, and test sets.
+
+        Args:
+            dataset: The underlying dataset object.
+            indices: A list of indices to select from the dataset.
+            transform: An optional transform to apply to each sample.
+        """
         self.dataset = dataset
         self.indices = indices
         self.transform = transform
@@ -37,12 +45,27 @@ class DiffusionModelDataModule(LightningDataModule):
         seed: int = 42,
         aug_settings: dict = {}
     ):
+        """
+        Initializes a DiffusionModelDataModule object.
+
+        Args:
+            dataset (str): The name of the dataset to use. Defaults to "CIFAR10". Possible values: CIFAR10, MNIST
+            data_dir (str): The directory where the dataset will be downloaded. Defaults to './data'.
+            batch_size (int): The batch size to use for training and validation. Defaults to 128.
+            num_workers (int): The number of workers to use for data loading. Defaults to 4.
+            val_split (float): The proportion of the dataset to use for validation. Defaults to 0.1.
+            seed (int): The seed to use for random number generation. Defaults to 42.
+            aug_settings (dict): A dictionary of augmentation settings. Defaults to {}.
+
+        Returns:
+            None
+        """
         super().__init__()
         self.save_hyperparameters()
 
         self.dataset_class = CIFAR10 if dataset == "CIFAR10" else MNIST
         
-        #DDPM: [0, 255] -> [-1, 1]
+        #DDPM: scale data from [0, 255] -> [-1, 1]
         self.mean = (0.5, ) if dataset == "MNIST" else (0.5, 0.5, 0.5)
         self.std = (0.5,)  if dataset == "MNIST" else (0.5, 0.5, 0.5)
 
@@ -55,6 +78,7 @@ class DiffusionModelDataModule(LightningDataModule):
             transforms.Normalize(self.mean, self.std)
         ])
 
+        #not applying augmentations to validation and tests set
         self.eval_transforms = transforms.Compose([
             transforms.Resize(32),
             transforms.ToTensor(),
