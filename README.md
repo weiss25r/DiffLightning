@@ -25,6 +25,8 @@ This project aims to provide a robust codebase for training and sampling from di
 DiffLightning/
 ├── config/
 │   └── training_config.yaml  # Main configuration file
+|-- docs/
+    └── samples/
 ├── src/
 │   ├── backbone.py           # U-Net implementation (ResBlocks, Attention)
 │   ├── dataset.py            # LightningDataModules for MNIST/CIFAR
@@ -79,9 +81,9 @@ Training, datasets, backbone and logging settings are specified using a simple y
 ## 🖼️ Gallery
 ### MNIST Samples
 The following samples were generated with a Diffusion Model trained on MNIST using Lightning AI Studio on a single NVIDIA T4 GPU, using settings ```config/training_config.yaml```. Checkpoint available as part of the current release.
-| <img src="./docs/samples/samples_1.png" width="500"/> | <img src="./docs/screenshots/samples_2.png" width="500"/> |
+| <img src="./docs/samples/samples_1.png" width="500"/> | <img src="./docs/samples/samples_2.png" width="500"/> |
 |---------------------------------------------------|---------------------------------------------------|
-| <img src="./docs/screenshots/samples_3.png" width="500"/> | <img src="./docs/screenshots/samples_4.png" width="500"/> |
+| <img src="./docs/samples/samples_3.png" width="500"/> | <img src="./docs/samples/samples_4.png" width="500"/> |
 
 
 ## 📄 References
