@@ -1,20 +1,19 @@
 # ⚡ DiffLightning
 
-**DiffLightning** is a clean, modular, and efficient **PyTorch Lightning** implementation of Denoising Diffusion Probabilistic Models (DDPM), based on the 2020 paper by Ho et al.
+**DiffLightning** is a clean and modular **PyTorch Lightning** implementation of Denoising Diffusion Probabilistic Models (DDPM), based on the 2020 paper by Ho et al.
 
-This project aims to provide a robust codebase for training and sampling from diffusion models, abstracting away the training loop boilerplate thanks to Lightning, while keeping the U-Net architecture and the diffusion process mathematically faithful to the original implementation.
-
+This project aims to provide a robust codebase for training and sampling from diffusion models, abstracting away the training loop thanks to Lightning, while keeping the U-Net architecture and the diffusion process mathematically faithful to the original implementation.
 
 [![PyTorch Lightning](https://img.shields.io/badge/PyTorch-Lightning-792ee5)](https://lightning.ai/)
 [![Python](https://img.shields.io/badge/Python-3.10%2B-blue)](https://www.python.org/)
 
 ## ✨ Features
 
-- **⚡ PyTorch Lightning Power**: Zero boilerplate training loops, automatic device handling, mixed-precision support, and easy checkpointing.
+- **⚡ PyTorch Lightning Power**: Abstracted training loop, automatic device handling, mixed-precision support, and easy checkpointing.
 - **📊 Logging**: Integrated **WandB** logging for tracking training loss, validating generated samples, and monitoring **FID score** in real-time.
 - **🧩 Modular Architecture**: Highly customizable U-Net backbone. Via config, you can easily tweak:
-  - Channel multipliers and base width.
-  - Attention resolutions (e.g., `16x16`, `4x8`).
+  - Channels
+  - Attention resolutions (e.g., `16x16`, `4x4`).
   - Timesteps ($T$) and data augmentation.
 - **🖼️ Multi-Dataset Support**: Native support for **MNIST** and **CIFAR-10** (with automatic download and normalization).
 - **🛠️ Config-Driven**: All hyperparameters (training, model, data) are managed via a simple YAML configuration file.
