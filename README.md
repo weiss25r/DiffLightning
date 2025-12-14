@@ -27,7 +27,7 @@ DiffLightning/
 |-- docs/
     └── samples/
 ├── src/
-│   ├── backbone.py           # U-Net implementation (ResBlocks, Attention)
+│   ├── backbone.py           # U-Net implementation (ResBlocks, Attention) in pure Pytorch
 │   ├── dataset.py            # LightningDataModules for MNIST/CIFAR
 │   ├── model.py              # The Diffusion Model
 │   ├── noise_scheduler.py    # Forward process implementation
