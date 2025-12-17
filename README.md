@@ -42,7 +42,7 @@ DiffLightning/
 ## 🚀 Quick Start
 **Installation**
 ```bash
-git clone [https://github.com/your-username/DiffLightning.git](https://github.com/your-username/DiffLightning.git)
+git clone [https://github.com/weiss25r/DiffLightning.git](https://github.com/weiss25r/DiffLightning.git)
 cd DiffLightning
 pip install -r requirements.txt
 ```
